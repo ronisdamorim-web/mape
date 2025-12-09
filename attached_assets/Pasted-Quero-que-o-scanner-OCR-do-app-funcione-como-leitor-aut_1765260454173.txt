@@ -1,0 +1,110 @@
+Quero que o scanner OCR do app funcione como leitor automático de ETIQUETAS DE PREÇO.
+
+REGRAS OBRIGATÓRIAS:
+
+1) INTERFACE DO SCANNER
+- Mostrar overlay com:
+  ✅ moldura central fixa
+  ✅ texto: "Aponte para a ETIQUETA DE PREÇO"
+  ✅ indicador visual "Escaneando..."
+- Botão:
+  "Fechar scanner"
+
+2) ÁREA DE LEITURA
+- NÃO escanear imagem inteira
+- Ler SOMENTE dentro da moldura central
+- Ignorar fundo, prateleiras, embalagens e pessoas.
+
+3) PRÉ-PROCESSAMENTO DA IMAGEM (ANTES DO OCR)
+- Escala de cinza
+- Aumentar contraste
+- Redução de ruído
+- Aplicar threshold leve
+
+4) VALIDAÇÃO DE TEXTO
+REJEITAR qualquer leitura que:
+❌ não tenha "R$"
+❌ não tenha número decimal com vírgula (ex: 29,78)
+❌ seja texto muito longo
+❌ não pareça padrão de mercado
+
+ACEITAR apenas textos que contenham:
+✅ "R$"
+✅ valores monetários reais
+✅ padrões como:
+   - Atacado
+   - Varejo
+   - À unidade
+   - Promoção
+   - Preço por unidade
+   - A partir de
+
+5) COMPORTAMENTO AO DETECTAR ETIQUETA VÁLIDA
+✅ exibir popup com dados reconhecidos:
+   - produto (se houver texto legível)
+   - preço(s)
+✅ exibir contador visual de 3 segundos
+✅ texto:
+   "Adicionando automaticamente ao carrinho em 3..."
+
+6) AUTO-ADIÇÃO
+Se NÃO houver nenhuma ação do usuário em até 3 segundos:
+→ adicionar AUTOMATICAMENTE ao carrinho.
+
+Se usuário tocar:
+✅ "Adicionar"
+→ adicionar imediatamente
+✅ "Cancelar"
+→ não salvar
+
+7) CONTROLE DE DUPLICIDADE
+- Não permitir:
+  ⛔ mesmo produto com mesmo preço duplicado
+- Se detectar:
+  → mostrar "Item já escaneado"
+  → não adicionar novamente
+
+8) CARRINHO EM TEMPO REAL (OBRIGATÓRIO)
+Toda vez que item entrar:
+✅ atualizar instantaneamente:
+   - subtotal
+   - total
+   - quantidade de itens
+   - lista de produtos
+
+9) LISTA DE ITENS
+Cada item deve ter:
+✅ nome (ou "Produto não identificado")
+✅ preço
+✅ data / horário do scan
+✅ botões:
+   [+] adicionar mais
+   [🗑] remover
+
+10) CONTROLE DE FRAME
+- Bloquear leitura repetida do mesmo frame
+- Só permitir nova leitura quando:
+   ✅ imagem mudar significativamente
+   OU
+   ✅ se passarem 2 segundos sem nova detecção
+
+11) STATUS EM TEMPO REAL
+Exibir estados:
+- "Escaneando..."
+- "Analisando etiqueta..."
+- "Etiqueta detectada"
+- "Preço reconhecido"
+- "Adicionado ao carrinho"
+
+12) TECNOLOGIA
+- OCR local (Tesseract.js)
+- Nada de API paga
+- Nada externo
+- Nada em nuvem
+
+Arquivos alvo:
+- src/components/OCRScanner.tsx
+- src/pages/Scanner.tsx
+- src/state/cartStore.ts (ou equivalente)
+
+Implementar agora.

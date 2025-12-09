@@ -1,0 +1,69 @@
+Objetivo:
+Quero transformar o scanner atual em OCR REAL em tempo real usando a câmera do dispositivo, sem botão de upload de imagem e sem botão de captura manual.
+
+Comportamento desejado:
+1. Ao clicar em "Escanear Agora", a câmera abre automaticamente.
+2. O OCR começa a rodar automaticamente em tempo real usando a câmera.
+3. REMOVE completamente o botão "Selecionar Imagem".
+4. NÃO pode existir botão "Capturar".
+5. A leitura deve ser contínua enquanto a câmera estiver aberta.
+6. Deve existir apenas um botão: "Fechar Scanner".
+
+Tecnologia:
+- Use Tesseract.js rodando em tempo real com frames do vídeo (HTML5 getUserMedia).
+- Processar frames a cada X segundos (ex: 1 segundo).
+- Usar Web Worker se possível.
+- OCR em português (por).
+
+Extração de dados:
+A IA deve detectar automaticamente:
+
+- Nome do produto
+- Preço por unidade
+- Preço atacado
+- Preço varejo
+- Preço promocional
+- Preço "a partir de X unidades"
+
+A leitura deve identificar múltiplos preços em UMA etiqueta (como: atacado, varejo, crediário).
+
+Exemplo de saída estruturada:
+Produto: Café 3 Corações 250g
+Preços detectados:
+- Atacado: 16,90
+- Passai Credi: 16,90
+- Varejo: 17,90
+Unidade: 250g
+Observação: ofertas condicionadas a quantidade
+
+Processamento de texto:
+Após OCR:
+- Limpar ruído de texto
+- Normalizar espaços
+- Extrair valores R$ automaticamente (regex)
+- Identificar palavras-chave:
+  "ATACADO", "VAREJO", "UNIDADE", "CRED", "A PARTIR", "KG"
+
+Comportamento na interface:
+- Cada leitura válida adiciona automaticamente o item na lista.
+- Se detectar novo preço diferente do mesmo produto → criar nova entrada.
+- Se detectar mesmo produto → atualizar valores.
+- Mostrar status:
+  "Lendo etiqueta..."
+  "Produto detectado"
+  "Preço atualizado"
+
+Localização dos arquivos:
+- Ajuste src/components/OCRScanner.tsx
+- Ajuste src/pages/Scanner.tsx
+- Remova qualquer implementação antiga de upload manual.
+- Garanta compatibilidade com mobile.
+
+Resultado final:
+Scanner deve funcionar igual um leitor automático de mercado, sem cliques extras, apenas apontar a câmera e o app reconhece sozinho.
+
+Entrega:
+Quero a funcionalidade ativa e funcionando com fluxo real.
+Nada de mock.
+Nada de simulação.
+OCR real.

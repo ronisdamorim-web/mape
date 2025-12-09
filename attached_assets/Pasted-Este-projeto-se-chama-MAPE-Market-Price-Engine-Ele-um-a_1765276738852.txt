@@ -1,0 +1,162 @@
+Este projeto se chama MAPE (Market Price Engine).
+Ele é um app de escaneamento de etiquetas de mercado em tempo real com carrinho automático.
+
+Siga este PRD como regra ABSOLUTA.
+Nada fora dele deve ser implementado.
+
+==================================================
+1. OBJETIVO
+==================================================
+
+Criar um app que escaneia ETIQUETAS DE PREÇO,
+detecta produto, quantidade e valor automaticamente,
+soma no carrinho em tempo real
+e salva tudo no Supabase.
+
+==================================================
+2. PLATAFORMA
+==================================================
+
+App Web.
+Funcionar em mobile (câmera real).
+Sem mock.
+Sem simulação.
+
+==================================================
+3. OCR
+==================================================
+
+Obrigatório:
+- OCR real usando Tesseract.js.
+- Câmera abre automaticamente.
+- Leitura contínua em tempo real.
+- SEM botão de selecionar imagem.
+- SEM botão de capturar.
+- SOMENTE leitura da câmera.
+- Área central com moldura azul.
+- Processar apenas dentro da moldura.
+- Indicação visual:
+  "Escaneando..."
+  "Analisando etiqueta..."
+
+==================================================
+4. DETECÇÃO DE ETIQUETA
+==================================================
+
+Aceitar APENAS texto que:
+- contenha valores monetários
+- esteja no formato R$ X,XX
+- padrão de preço de mercado.
+
+Ignorar:
+- recibos
+- embalagens
+- telas
+- objetos
+- pessoas
+- qualquer texto sem preço válido.
+
+==================================================
+5. EXTRAÇÃO DE DADOS
+==================================================
+
+Detectar:
+- Nome do produto (se possível).
+- Peso / unidade.
+- TODOS os preços da etiqueta.
+
+Se houver mais de 1 preço:
+→ selecionar automaticamente o MENOR valor.
+
+==================================================
+6. ANTI-DUPLICIDADE
+==================================================
+
+Se produto + preço já existir:
+→ NÃO adicionar novamente.
+→ mostrar aviso "Item já adicionado".
+
+Se mesmo produto com preço diferente:
+→ adicionar nova entrada.
+
+==================================================
+7. AUTO ADD EM 3 SEGUNDOS
+==================================================
+
+Após reconhecer corretamente:
+- mostrar popup
+- iniciar contador de 3s
+- se o usuário não cancelar:
+  → adicionar automaticamente ao carrinho.
+
+==================================================
+8. CARRINHO EM TEMPO REAL
+==================================================
+
+Atualizar instantaneamente:
+- subtotal
+- total
+- quantidade
+- lista
+
+Sem botão confirmar.
+Sem refresh.
+
+==================================================
+9. PERSISTÊNCIA (SUPABASE)
+==================================================
+
+Obrigatório:
+- cada usuário = carrinho isolado.
+- itens e valores persistidos.
+- trocar de tela não pode perder dados.
+- retornar para o app mantém carrinho.
+
+==================================================
+10. INTERFACE
+==================================================
+
+Interface igual às imagens fornecidas:
+- fundo escuro
+- moldura azul
+- textos brancos
+- feedback forte.
+
+==================================================
+11. ERROS
+==================================================
+
+Todo erro deve:
+- ser tratado
+- ser mostrado ao usuário
+- ser logado no console.
+
+==================================================
+12. PROIBIDO
+==================================================
+
+❌ mock
+❌ simulação
+❌ dado falso
+❌ API paga
+❌ qualquer preço inventado
+
+==================================================
+13. OBJETIVO FINAL
+==================================================
+
+Escaneou → reconheceu → popup → 3s →
+adicione → carrinho → total em tempo real →
+persistiu no Supabase.
+
+==================================================
+14. ENTREGA
+==================================================
+
+Quero o sistema funcionando agora,
+sem explicações,
+com implementação direta no código.
+
+Nada de sugestão.
+Nada de teoria.
+Apenas código funcional.

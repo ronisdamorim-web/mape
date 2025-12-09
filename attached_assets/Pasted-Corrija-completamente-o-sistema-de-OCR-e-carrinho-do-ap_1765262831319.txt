@@ -1,0 +1,113 @@
+Corrija completamente o sistema de OCR e carrinho do app seguindo ESTAS EXIGÊNCIAS:
+
+============================
+FUNCIONALIDADE OCR REAL
+============================
+
+1. Implementar OCR real com Tesseract.js ou alternativa funcional.
+2. Detectar SOMENTE etiquetas de preço (ignorar objetos, telas, pessoas e superfícies).
+3. Validar padrões de preço como:
+   - R$ 9,99
+   - 12,90
+   - 5,00
+4. Rejeitar leitura se não houver valor monetário válido.
+
+============================
+EXPERIÊNCIA DE ESCANEAMENTO
+============================
+
+1. Mostrar mensagem:
+   "Analisando etiqueta..."
+2. Se falhar:
+   - Mostrar erro visual: 
+     "Não foi possível ler o preço"
+     Botão: Tentar novamente
+3. Se detectar:
+   - Mostrar card verde com:
+     ✅ Produto Detectado!
+     Nome do produto + Preço
+
+============================
+ANTI DUPLICAÇÃO
+============================
+
+1. Se produto já existir no carrinho:
+   - Atualizar quantidade
+   - NÃO adicionar duplicado
+   - Apenas incrementar
+2. Mostrar toast:
+   "Produto atualizado no carrinho"
+
+============================
+ADICIONAR AUTOMÁTICO
+============================
+
+1. Ao detectar produto:
+   - Mostrar popup
+   - Iniciar contagem de 3 segundos
+2. Se o usuário NÃO tocar em nada:
+   -> Adicionar automaticamente ao carrinho
+3. Botões no popup:
+   - Adicionar agora
+   - Cancelar
+
+============================
+CARRINHO EM TEMPO REAL
+============================
+
+Sempre atualizar instantaneamente:
+- Valor total
+- Subtotal
+- Quantidade
+- Lista de itens
+- Alteração de quantidade + / -
+
+============================
+PERSISTÊNCIA REAL
+============================
+
+1. Nada mais pode usar dados temporários.
+2. Salvar tudo no Supabase:
+   - Itens
+   - Valores
+   - Quantidade
+3. Ao trocar de tela:
+   -> Carrinho deve ser restaurado automaticamente
+4. Lista não pode desaparecer.
+
+============================
+INTERFACE
+============================
+
+1. Scanner deve:
+   - Mostrar moldura azul igual às imagens
+   - Texto: "Escaneando preços..."
+2. Interface deve reagir igual às imagens enviadas.
+
+============================
+CORRIGIR BUGS
+============================
+
+✔ Carrinho zerando sozinho  
+✔ Valores NaN  
+✔ Itens não persistem  
+✔ OCR falha direto  
+✔ Erros sem feedback  
+✔ Preço não aparece  
+
+============================
+IMPORTANTE
+============================
+
+Não simular dados.
+Não usar mock.
+Não colocar número fake.
+Só OCR REAL.
+
+============================
+OBJETIVO FINAL
+============================
+
+Escaneou → reconheceu → popup → 3s → carrinho → valor atualizado → salvo no Supabase → funcionando em tempo real.
+
+Execute as correções e apresente resultado testável.

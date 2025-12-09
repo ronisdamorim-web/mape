@@ -1,0 +1,50 @@
+modules = ["nodejs-20", "web", "postgresql-16"]
+[agent]
+expertMode = true
+
+[nix]
+channel = "stable-25_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Mape App"
+
+[[workflows.workflow]]
+name = "Mape App"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 35467
+externalPort = 3000
+
+[deployment]
+deploymentTarget = "static"
+run = ["npm", "run", "dev"]
+build = ["npm", "run", "build"]
+publicDir = "build"
+
+[userenv]
+
+[userenv.shared]
+VITE_SUPABASE_URL = "https://hfkmuunnszclcipmciid.supabase.co"
+VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhma211dW5uc3pjbGNpcG1jaWlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5MzQ4MTUsImV4cCI6MjA3OTUxMDgxNX0.wQA8M0kXc5K91QMhcA-1Qm8Clw2qSCP-2E4XxDBD6_8"

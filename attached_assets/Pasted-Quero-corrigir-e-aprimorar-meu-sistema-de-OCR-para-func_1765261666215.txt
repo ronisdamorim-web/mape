@@ -1,0 +1,103 @@
+Quero corrigir e aprimorar meu sistema de OCR para funcionar exatamente como um scanner de etiqueta de mercado em TEMPO REAL.
+
+OBJETIVO:
+Transformar o scanner em um OCR contínuo via câmera, sem botão de captura, que detecta apenas ETIQUETAS DE PREÇOS, extrai automaticamente as informações e adiciona os produtos ao carrinho.
+
+REGRAS DE FUNCIONAMENTO OBRIGATÓRIAS:
+
+1. A câmera deve abrir automaticamente.
+2. NÃO deve existir botão "Selecionar imagem" nem botão "Capturar".
+3. O OCR deve rodar em TEMPO REAL.
+4. O foco deve ser apenas em ETIQUETAS DE PREÇO.
+5. Ignorar qualquer outra imagem (embalagens, rostos, telas, objetos).
+6. Exibir na tela: "Analisando etiqueta..." enquanto processa.
+7. Mostrar overlay indicando que está escaneando.
+8. Criar visual igual aos meus prints (retângulo transparente com bordas).
+
+DETECÇÃO AUTOMÁTICA:
+
+O OCR deve detectar automaticamente:
+- Nome do produto
+- Peso/Volume
+- Todos os tipos de preço visíveis na etiqueta:
+    - atacado
+    - varejo
+    - promocional
+    - preço por unidade
+    - preço por kg
+
+Quando existir mais de UM preço:
+→ exibir todos no popup
+→ permitir escolher
+→ se não houver escolha em 3 segundos, usar o menor valor automaticamente.
+
+EVITAR PRODUTO DUPLICADO:
+Se o mesmo produto já estiver no carrinho:
+→ NÃO adicionar novamente
+→ apenas atualizar o valor se o preço for diferente.
+
+REGRA DE AUTO-ADICIONAMENTO:
+Após reconhecer produto + preço corretamente:
+→ aguardar 3 segundos
+→ se o usuário não cancelar
+→ adicionar automaticamente ao carrinho.
+
+CARRINHO (EM TEMPO REAL):
+Atualizar automaticamente:
+- Total
+- Subtotal
+- Quantidade
+- Lista de itens
+
+Se já existir:
+→ manter botões de editar e remover.
+
+TELA DE CONFIRMAÇÃO:
+Ao detectar um item:
+→ exibir popup grande:
+    "Produto Detectado"
+    Nome
+    Preço
+    Status visual verde
+→ após isso voltar a escanear automaticamente
+
+CAMERA:
+Resolver erro de permissão.
+Garantir:
+- HTTPS obrigatório
+- getUserMedia funcionando corretamente
+- fallback de erro amigável se falhar.
+
+FILTROS OCR:
+Aplicar:
+- threshold
+- grayscale
+- normalização de contraste
+- recorte automático da área de preço
+- regex para detectar valores monetários no formato R$ X,XX
+
+BIBLIOTECA:
+Usar Tesseract.js corretamente, sem travar a UI.
+Rodar OCR por frames com debounce (não processar tudo o tempo todo).
+
+INTERFACE:
+Deixar como nos meus prints:
+- fundo escuro
+- bordas azuis no scanner
+- texto:
+    "Escaneando preços..."
+    "Analisando etiqueta..."
+    "Produto Detectado"
+
+CUSTO:
+O OCR deve rodar 100% local.
+Não usar API paga.
+Não usar serviços externos.
+Nada de IA paga.
+
+RESULTADO FINAL:
+Quando terminar:
+→ Mostrar mensagem: "OCR corrigido e funcionando em tempo real".
+
+Não quero explicação.
+Quero implementação direta no código.
