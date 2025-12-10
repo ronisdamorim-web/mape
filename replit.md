@@ -3,15 +3,15 @@
 ## Overview
 Mape é um aplicativo de compras inteligente construído com React, Vite e Supabase. O app ajuda usuários a fazer decisões de compra inteligentes comparando preços e gerenciando listas de compras. A interface está em português (BR).
 
-## Status: Produção (Dezembro 9, 2025)
+## Status: Produção (Dezembro 10, 2025)
 O projeto está pronto para uso real:
 - Nome atualizado para "Mape"
 - Autenticação real com Supabase Auth
 - Login por e-mail/senha funcionando
 - Cadastro e recuperação de senha
 - Rotas protegidas
-- OCR em tempo real com Tesseract.js
-- Persistência real com Supabase (tabela cart_items)
+- OCR 100% local com Tesseract.js (pré-processamento avançado)
+- Persistência real com Supabase (tabelas cart_items, purchase_history)
 - Sem código fake ou mock
 
 ## Estrutura do Projeto
@@ -83,11 +83,19 @@ Em `src/App.tsx`:
 
 ## OCR com Tesseract.js
 Implementado em `src/components/OCRScanner.tsx`:
-- Captura via câmera
-- Upload de imagem
-- Processamento OCR (português)
+- 100% local (sem APIs externas)
+- Captura via câmera traseira
+- Pré-processamento avançado:
+  - Box blur para redução de ruído
+  - Normalização de contraste adaptativa
+  - Thresholding binário
+- Controles inteligentes:
+  - Verificação de conteúdo visível (edge detection)
+  - Estabilidade de frame (2 frames estáveis antes de processar)
+  - Back-off progressivo quando sem etiqueta (1.2s → 3s)
+  - Prevenção de leituras duplicadas
 - Extração de preços (R$ XX,XX)
-- Extração de quantidades
+- Rastreamento completo de timeouts para limpeza
 
 ## Desenvolvimento
 
