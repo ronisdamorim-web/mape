@@ -1,0 +1,63 @@
+Quero substituir o OCR atual por um OCR melhor e mais confiável, usando:
+
+GOOGLE CLOUD VISION API (TEXT_DETECTION)
+
+OBJETIVO:
+Fazer o scanner funcionar de forma contínua, sem fechar automaticamente, mas SEM loop rápido nem repetição descontrolada.
+
+COMPORTAMENTO DESEJADO:
+✅ O scanner deve permanecer aberto.
+✅ A leitura só acontece quando detectar UMA etiqueta válida.
+✅ Após detectar, o OCR deve PAUSAR automaticamente.
+✅ O OCR só deve ler novamente quando:
+   - a câmera sair da etiqueta (área vazia), e
+   - o usuário apontar novamente para UMA nova etiqueta.
+✅ Não deve ficar lendo em loop automático.
+✅ Não deve repetir a leitura da mesma etiqueta em sequência.
+✅ Não deve disparar múltiplos popups.
+✅ Não deve travar o app.
+
+LÓGICA DE CONTROLE:
+✅ Implementar controle de "etiqueta já lida" para evitar duplicação.
+✅ Usar sistema de cooldown inteligente:
+   - leu → pausa
+   - campo vazio → libera nova leitura
+✅ Criar verificação para ignorar leitura repetida do mesmo conteúdo.
+✅ OCR deve parar completamente quando o usuário fechar o scanner.
+
+REQUISITOS UX:
+✅ Scanner fica sempre aberto.
+✅ Sem popups em cascata.
+✅ Exibir apenas UMA confirmação por leitura.
+✅ Exibir mensagem “Aponte para a etiqueta” quando pronto para nova leitura.
+✅ Exibir mensagem “Etiqueta detectada” ao reconhecer.
+✅ Feedback visual claro ao detectar preço.
+
+BOTÃO DE FECHAR:
+✅ Mover o botão de fechar para a parte inferior da tela.
+✅ Botão deve estar acima de tudo (z-index máximo).
+✅ Botão deve ser SEMPRE clicável.
+✅ Fechar o scanner deve:
+   - interromper o OCR
+   - encerrar a câmera
+   - limpar estado de leitura
+
+OUTROS AJUSTES:
+✅ Filtrar somente padrões de preço (ex: 9,99 / 12,90).
+✅ Melhorar performance geral.
+✅ Eliminar listeners duplicados.
+✅ Evitar OCR rodando em background.
+
+RESTRIÇÕES:
+🚫 Não refatorar todo o projeto.
+🚫 Manter a estrutura geral.
+🚫 Ajustes pontuais.
+🚫 Não remover recursos existentes.
+
+FINAL:
+Ao terminar, me diga:
+- Qual OCR foi removido
+- Como a Google Vision foi integrada
+- Como funciona a trava de leitura
+- Como você garantiu que não lê a mesma etiqueta duas vezes
+- Como foi corrigido o botão de fechar
