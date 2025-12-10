@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, CheckCircle, AlertCircle, Camera } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Camera, Scan } from 'lucide-react';
 import Tesseract from 'tesseract.js';
 
 export interface DetectedPrice {
@@ -34,13 +34,7 @@ export interface ExtractedItem {
   unit: string;
 }
 
-type ScanStatus = 'starting' | 'scanning' | 'analyzing' | 'detected' | 'error' | 'added';
-
-interface PendingProduct {
-  product: ExtractedProduct;
-  countdown: number;
-  selectedPrice: number;
-}
+type ScanStatus = 'starting' | 'ready' | 'scanning' | 'detected' | 'added' | 'error';
 
 interface OCRScannerProps {
   onScanComplete: (result: OCRResult) => void;
@@ -60,30 +54,71 @@ export function OCRScanner({
   scannedProducts = []
 }: OCRScannerProps) {
   const [status, setStatus] = useState<ScanStatus>('starting');
-  const [pendingProduct, setPendingProduct] = useState<PendingProduct | null>(null);
-  const [addedProducts, setAddedProducts] = useState<ExtractedProduct[]>([]);
-  const [lastProcessedText, setLastProcessedText] = useState('');
-  const [lastDetectionTime, setLastDetectionTime] = useState(0);
+  const [detectedPrice, setDetectedPrice] = useState<number | null>(null);
+  const [statusMessage, setStatusMessage] = useState('Iniciando câmera...');
   const [cameraError, setCameraError] = useState<string | null>(null);
+  
+  void scannedProducts;
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const cropCanvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const workerRef = useRef<Tesseract.Worker | null>(null);
-  const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const priceTimeoutsRef = useRef<Set<NodeJS.Timeout>>(new Set());
   const isProcessingRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const lastPriceRef = useRef<string>('');
+  const lastDetectionTimeRef = useRef<number>(0);
+  const recentPricesRef = useRef<Set<string>>(new Set());
+  const lastFrameDataRef = useRef<string>('');
+  const stableFrameCountRef = useRef<number>(0);
+  const detectionTimeoutsRef = useRef<Set<NodeJS.Timeout>>(new Set());
+  const emptyFrameCountRef = useRef<number>(0);
+  const backoffDelayRef = useRef<number>(1200);
 
-  const preprocessImage = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+  const simpleBoxBlur = (data: Uint8ClampedArray, width: number, height: number) => {
+    const copy = new Uint8ClampedArray(data);
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const i = (y * width + x) * 4;
+        for (let c = 0; c < 3; c++) {
+          const sum = 
+            copy[((y-1) * width + x-1) * 4 + c] + copy[((y-1) * width + x) * 4 + c] + copy[((y-1) * width + x+1) * 4 + c] +
+            copy[(y * width + x-1) * 4 + c] + copy[(y * width + x) * 4 + c] + copy[(y * width + x+1) * 4 + c] +
+            copy[((y+1) * width + x-1) * 4 + c] + copy[((y+1) * width + x) * 4 + c] + copy[((y+1) * width + x+1) * 4 + c];
+          data[i + c] = Math.floor(sum / 9);
+        }
+      }
+    }
+  };
+
+  const advancedPreprocess = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
     const imageData = ctx.getImageData(0, 0, width, height);
     const data = imageData.data;
 
+    simpleBoxBlur(data, width, height);
+
+    let minBrightness = 255;
+    let maxBrightness = 0;
     for (let i = 0; i < data.length; i += 4) {
-      const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-      const contrast = 1.5;
-      const adjusted = ((gray - 128) * contrast) + 128;
-      const threshold = adjusted > 130 ? 255 : adjusted < 70 ? 0 : adjusted;
+      const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+      minBrightness = Math.min(minBrightness, brightness);
+      maxBrightness = Math.max(maxBrightness, brightness);
+    }
+
+    const range = maxBrightness - minBrightness || 1;
+    const contrast = 2.0;
+    const brightness = 10;
+
+    for (let i = 0; i < data.length; i += 4) {
+      let gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+      
+      gray = ((gray - minBrightness) / range) * 255;
+      gray = ((gray - 128) * contrast) + 128 + brightness;
+      gray = Math.max(0, Math.min(255, gray));
+
+      const threshold = gray > 140 ? 255 : 0;
       
       data[i] = threshold;
       data[i + 1] = threshold;
@@ -93,336 +128,268 @@ export function OCRScanner({
     ctx.putImageData(imageData, 0, 0);
   };
 
-  const isValidPriceText = (text: string): boolean => {
-    if (!text || text.length < 5 || text.length > 1500) return false;
+  const hasVisibleContent = (ctx: CanvasRenderingContext2D, width: number, height: number): boolean => {
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+    let edgeCount = 0;
+    const step = 4;
     
-    const hasRealSign = /R\s*\$|RS\s*\$|R\$|\$\s*\d/i.test(text);
-    const hasDecimalPrice = /\d{1,4}[,\.]\d{2}/i.test(text);
+    for (let y = step; y < height - step; y += step) {
+      for (let x = step; x < width - step; x += step) {
+        const i = (y * width + x) * 4;
+        const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        const rightI = (y * width + x + step) * 4;
+        const rightBrightness = (data[rightI] + data[rightI + 1] + data[rightI + 2]) / 3;
+        
+        if (Math.abs(brightness - rightBrightness) > 40) {
+          edgeCount++;
+        }
+      }
+    }
     
-    return hasRealSign || hasDecimalPrice;
+    const totalSamples = Math.floor(width / step) * Math.floor(height / step);
+    const edgeRatio = edgeCount / totalSamples;
+    
+    return edgeRatio > 0.05;
   };
 
-  const isDuplicate = (product: ExtractedProduct): boolean => {
-    const allProducts = [...scannedProducts, ...addedProducts];
-    const now = Date.now();
-    return allProducts.some(p => {
-      const timeDiff = now - p.timestamp;
-      const sameName = p.name.toLowerCase().substring(0, 10) === product.name.toLowerCase().substring(0, 10);
-      const samePrice = Math.abs(p.mainPrice - product.mainPrice) < 0.10;
-      if (timeDiff < 5000) {
-        return sameName && samePrice;
-      }
-      return sameName && samePrice;
-    });
-  };
+  const extractPriceOnly = (text: string): number | null => {
+    if (!text || text.length < 3) return null;
 
+    const cleanText = text.replace(/[oO]/g, '0').replace(/[lI]/g, '1').replace(/\s+/g, ' ');
 
-  const extractProductInfo = useCallback((text: string): ExtractedProduct | null => {
-    if (!isValidPriceText(text)) return null;
-
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    const fullText = lines.join(' ').toUpperCase();
-
-    let productName = '';
-    
-    const productKeywords = [
-      'CAFE', 'CAFÉ', 'ARROZ', 'FEIJAO', 'FEIJÃO', 'AÇUCAR', 'ACUCAR',
-      'OLEO', 'ÓLEO', 'LEITE', 'CARNE', 'FRANGO', 'TRADICIONAL', 'EXTRA FORTE',
-      'POUCH', 'ALMOF', 'CORACOES', 'CORAÇÕES', 'PILAO', 'PILÃO', 'MELITTA',
-      'SABAO', 'SABÃO', 'DETERGENTE', 'MACARRAO', 'MACARRÃO', 'BISCOITO',
-      'BOLACHA', 'REFRIGERANTE', 'SUCO', 'AGUA', 'ÁGUA', 'INTEGRAL',
-      'DESNATADO', 'FARINHA', 'SAL', 'MARGARINA', 'MANTEIGA', 'QUEIJO',
-      'PRESUNTO', 'MORTADELA', 'SALSICHA', 'LINGUICA', 'BACON'
-    ];
-
-    for (const line of lines) {
-      const upperLine = line.toUpperCase();
-      if (productKeywords.some(kw => upperLine.includes(kw))) {
-        productName = line.replace(/[^a-zA-ZÀ-ÿ0-9\s]/g, ' ').trim();
-        break;
-      }
-    }
-
-    if (!productName) {
-      const firstValidLine = lines.find(l => 
-        l.length > 4 && 
-        !/^[R\$\d\s,\.]+$/.test(l) &&
-        !/^(PRECO|PREÇO|ATACADO|VAREJO|CRED|PASSAI|CX\d|AM\d|FD\d|LJ\s*\d)/i.test(l)
-      );
-      if (firstValidLine) {
-        productName = firstValidLine.replace(/[^a-zA-ZÀ-ÿ0-9\s]/g, ' ').trim();
-      }
-    }
-
-    if (!productName || productName.length < 3) {
-      productName = 'Produto não identificado';
-    }
-
-    const prices: DetectedPrice[] = [];
-    const addedPrices = new Set<string>();
-
-    const addPrice = (type: DetectedPrice['type'], value: number, label: string) => {
-      const key = `${type}-${value.toFixed(2)}`;
-      if (value > 0.50 && value < 1000 && !addedPrices.has(key)) {
-        addedPrices.add(key);
-        prices.push({ type, value, label });
-      }
-    };
-
-    const atacadoPatterns = [
-      /ATACADO[^\d]{0,15}R?\$?\s*(\d{1,3})[,.](\d{2})/gi,
-      /(\d{1,3})[,.](\d{2})[^\d]{0,10}ATACADO/gi
-    ];
-    for (const pattern of atacadoPatterns) {
-      const matches = fullText.matchAll(pattern);
-      for (const match of matches) {
-        const price = parseFloat(`${match[1]}.${match[2]}`);
-        addPrice('atacado', price, 'Atacado');
-      }
-    }
-
-    const varejoPatterns = [
-      /VAREJO[^\d]{0,15}R?\$?\s*(\d{1,3})[,.](\d{2})/gi,
-      /(\d{1,3})[,.](\d{2})[^\d]{0,10}VAREJO/gi,
-      /AVULSO[^\d]{0,15}R?\$?\s*(\d{1,3})[,.](\d{2})/gi
-    ];
-    for (const pattern of varejoPatterns) {
-      const matches = fullText.matchAll(pattern);
-      for (const match of matches) {
-        const price = parseFloat(`${match[1]}.${match[2]}`);
-        addPrice('varejo', price, 'Varejo');
-      }
-    }
-
-    const creditoPatterns = [
-      /(PASSAI|CRED|CREDI|CARTAO|CARTÃO)[^\d]{0,15}R?\$?\s*(\d{1,3})[,.](\d{2})/gi
-    ];
-    for (const pattern of creditoPatterns) {
-      const matches = fullText.matchAll(pattern);
-      for (const match of matches) {
-        const price = parseFloat(`${match[2]}.${match[3]}`);
-        addPrice('credito', price, 'Crediário');
-      }
-    }
-
-    const mainPricePatterns = [
+    const pricePatterns = [
       /R\s*\$\s*(\d{1,3})[,.](\d{2})/gi,
-      /RS\s*(\d{1,3})[,.](\d{2})/gi
+      /(\d{1,3})[,](\d{2})(?!\d)/g,
+      /(\d{1,2})[.](\d{2})(?!\d)/g,
     ];
-    if (prices.length === 0) {
-      for (const pattern of mainPricePatterns) {
-        const matches = fullText.matchAll(pattern);
-        for (const match of matches) {
-          const price = parseFloat(`${match[1]}.${match[2]}`);
-          addPrice('varejo', price, 'Preço');
-        }
-      }
-    }
 
-    if (prices.length === 0) {
-      const decimalPattern = /(\d{1,3})[,](\d{2})(?!\d)/g;
-      const matches = fullText.matchAll(decimalPattern);
-      let count = 0;
+    for (const pattern of pricePatterns) {
+      const matches = [...cleanText.matchAll(pattern)];
       for (const match of matches) {
-        if (count >= 2) break;
-        const price = parseFloat(`${match[1]}.${match[2]}`);
-        if (price >= 1.00) {
-          addPrice('outro', price, 'Preço');
-          count++;
+        const intPart = parseInt(match[1], 10);
+        const decPart = parseInt(match[2], 10);
+        const price = intPart + decPart / 100;
+        
+        if (price >= 0.50 && price <= 999.99) {
+          return price;
         }
       }
     }
 
-    if (prices.length === 0) return null;
+    return null;
+  };
 
-    const priorityOrder = ['varejo', 'atacado', 'credito', 'unidade', 'kg', 'outro'];
-    prices.sort((a, b) => {
-      const aIdx = priorityOrder.indexOf(a.type);
-      const bIdx = priorityOrder.indexOf(b.type);
-      if (aIdx !== bIdx) return aIdx - bIdx;
-      return a.value - b.value;
-    });
+  const isPriceDuplicate = (price: number): boolean => {
+    const priceKey = price.toFixed(2);
+    
+    if (priceKey === lastPriceRef.current) {
+      return true;
+    }
 
-    const mainPrice = prices[0].value;
+    if (recentPricesRef.current.has(priceKey)) {
+      return true;
+    }
 
-    const unitMatch = fullText.match(/(\d+)\s*(G|KG|ML|L|UN)\b/i);
-    const unit = unitMatch ? `${unitMatch[1]}${unitMatch[2].toLowerCase()}` : undefined;
+    return false;
+  };
 
-    const now = new Date();
+  const registerPrice = (price: number) => {
+    const priceKey = price.toFixed(2);
+    lastPriceRef.current = priceKey;
+    recentPricesRef.current.add(priceKey);
 
-    return {
-      id: `prod-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      name: productName.substring(0, 60),
-      unit,
-      prices,
-      mainPrice,
-      rawText: text.substring(0, 300),
-      timestamp: Date.now(),
-      scannedAt: `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
-    };
-  }, []);
+    const timeoutId = setTimeout(() => {
+      recentPricesRef.current.delete(priceKey);
+      priceTimeoutsRef.current.delete(timeoutId);
+    }, 10000);
+    priceTimeoutsRef.current.add(timeoutId);
+  };
+
+  const checkFrameStability = (ctx: CanvasRenderingContext2D, width: number, height: number): boolean => {
+    const sampleSize = 100;
+    const stepX = Math.floor(width / 10);
+    const stepY = Math.floor(height / 10);
+    let hash = '';
+    
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+    
+    for (let i = 0; i < sampleSize && i * stepX * stepY * 4 < data.length; i++) {
+      const idx = (Math.floor(i / 10) * stepY * width + (i % 10) * stepX) * 4;
+      if (idx < data.length) {
+        hash += String.fromCharCode(Math.floor(data[idx] / 25));
+      }
+    }
+    
+    if (hash === lastFrameDataRef.current) {
+      stableFrameCountRef.current++;
+    } else {
+      stableFrameCountRef.current = 0;
+      lastFrameDataRef.current = hash;
+    }
+    
+    return stableFrameCountRef.current >= 2;
+  };
 
   const processFrame = useCallback(async () => {
-    if (isProcessingRef.current || !videoRef.current || !canvasRef.current || !cropCanvasRef.current || !workerRef.current) {
+    if (!isMountedRef.current) return;
+    if (isProcessingRef.current) return;
+    if (!videoRef.current || !canvasRef.current || !workerRef.current) return;
+    if (status === 'detected' || status === 'added') return;
+
+    const now = Date.now();
+    if (now - lastDetectionTimeRef.current < 2500) {
+      scheduleNextScan();
       return;
     }
 
-    if (pendingProduct) return;
-
-    const now = Date.now();
-    if (now - lastDetectionTime < 2000) return;
-
     isProcessingRef.current = true;
+    setStatus('scanning');
+    setStatusMessage('Analisando...');
 
     try {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      const cropCanvas = cropCanvasRef.current;
       
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      const cropWidth = Math.floor(video.videoWidth * 0.6);
+      const cropHeight = Math.floor(video.videoHeight * 0.35);
+      const cropX = Math.floor((video.videoWidth - cropWidth) / 2);
+      const cropY = Math.floor((video.videoHeight - cropHeight) / 2);
+
+      canvas.width = cropWidth;
+      canvas.height = cropHeight;
       
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         isProcessingRef.current = false;
-        return;
-      }
-      
-      ctx.drawImage(video, 0, 0);
-
-      const frameWidth = video.videoWidth * 0.75;
-      const frameHeight = video.videoHeight * 0.55;
-      const frameX = (video.videoWidth - frameWidth) / 2;
-      const frameY = (video.videoHeight - frameHeight) / 2;
-
-      cropCanvas.width = frameWidth;
-      cropCanvas.height = frameHeight;
-      const cropCtx = cropCanvas.getContext('2d');
-      if (!cropCtx) {
-        isProcessingRef.current = false;
+        scheduleNextScan();
         return;
       }
 
-      cropCtx.drawImage(
-        canvas,
-        frameX, frameY, frameWidth, frameHeight,
-        0, 0, frameWidth, frameHeight
+      ctx.drawImage(
+        video,
+        cropX, cropY, cropWidth, cropHeight,
+        0, 0, cropWidth, cropHeight
       );
 
-      preprocessImage(cropCtx, frameWidth, frameHeight);
-      
-      const imageData = cropCanvas.toDataURL('image/jpeg', 0.8);
+      const hasContent = hasVisibleContent(ctx, cropWidth, cropHeight);
+      if (!hasContent) {
+        emptyFrameCountRef.current++;
+        backoffDelayRef.current = Math.min(3000, 1200 + emptyFrameCountRef.current * 300);
+        isProcessingRef.current = false;
+        setStatus('ready');
+        setStatusMessage('Aponte para a etiqueta');
+        scheduleNextScan();
+        return;
+      }
 
-      setStatus('analyzing');
+      const isStable = checkFrameStability(ctx, cropWidth, cropHeight);
+      if (!isStable) {
+        isProcessingRef.current = false;
+        setStatus('ready');
+        setStatusMessage('Estabilize a câmera...');
+        scheduleNextScan();
+        return;
+      }
+
+      emptyFrameCountRef.current = 0;
+      backoffDelayRef.current = 1200;
+
+      advancedPreprocess(ctx, cropWidth, cropHeight);
+
+      const imageData = canvas.toDataURL('image/png');
 
       const result = await workerRef.current.recognize(imageData);
       const text = result.data.text;
 
-      if (text.length > 8 && text !== lastProcessedText) {
-        setLastProcessedText(text);
+      if (!isMountedRef.current) return;
+
+      const price = extractPriceOnly(text);
+
+      if (price !== null && !isPriceDuplicate(price)) {
+        lastDetectionTimeRef.current = Date.now();
+        registerPrice(price);
         
-        const product = extractProductInfo(text);
-        
-        if (product && product.prices.length > 0) {
-          if (isDuplicate(product)) {
-            setStatus('scanning');
-          } else {
-            setStatus('detected');
-            setLastDetectionTime(Date.now());
-            
-            setPendingProduct({ 
-              product, 
-              countdown: 3,
-              selectedPrice: product.mainPrice
-            });
-            onProductDetected?.(product);
-          }
-        } else {
-          setStatus('scanning');
-        }
+        setDetectedPrice(price);
+        setStatus('detected');
+        setStatusMessage(`R$ ${price.toFixed(2)}`);
+
+        const product: ExtractedProduct = {
+          id: `prod-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          name: 'Produto escaneado',
+          prices: [{ type: 'varejo', value: price, label: 'Preço' }],
+          mainPrice: price,
+          rawText: text.substring(0, 100),
+          timestamp: Date.now(),
+          scannedAt: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+        };
+
+        onProductDetected?.(product);
+
+        const addTimeout = setTimeout(() => {
+          if (!isMountedRef.current) return;
+          detectionTimeoutsRef.current.delete(addTimeout);
+          
+          onProductAdded?.(product);
+          onScanComplete({
+            text: product.rawText,
+            confidence: 90,
+            items: [{ name: product.name, price: product.mainPrice, quantity: 1, unit: 'un' }],
+            products: [product]
+          });
+
+          setStatus('added');
+          setStatusMessage('Adicionado!');
+
+          const resetTimeout = setTimeout(() => {
+            if (!isMountedRef.current) return;
+            detectionTimeoutsRef.current.delete(resetTimeout);
+            setDetectedPrice(null);
+            setStatus('ready');
+            setStatusMessage('Aponte para a etiqueta');
+            scheduleNextScan();
+          }, 1500);
+          detectionTimeoutsRef.current.add(resetTimeout);
+        }, 800);
+        detectionTimeoutsRef.current.add(addTimeout);
+
       } else {
-        setStatus('scanning');
+        setStatus('ready');
+        setStatusMessage('Aponte para a etiqueta');
+        scheduleNextScan();
       }
+
     } catch (err) {
       console.error('Erro no OCR:', err);
-      setStatus('scanning');
+      if (isMountedRef.current) {
+        setStatus('ready');
+        setStatusMessage('Aponte para a etiqueta');
+        scheduleNextScan();
+      }
     } finally {
       isProcessingRef.current = false;
     }
-  }, [lastProcessedText, lastDetectionTime, pendingProduct, extractProductInfo, onProductDetected, scannedProducts, addedProducts]);
+  }, [status, onProductDetected, onProductAdded, onScanComplete]);
 
-  useEffect(() => {
-    if (!pendingProduct) return;
-
-    if (pendingProduct.countdown <= 0) {
-      confirmAdd(pendingProduct.selectedPrice);
-      return;
-    }
-
-    countdownIntervalRef.current = setTimeout(() => {
-      setPendingProduct(prev => prev ? { ...prev, countdown: prev.countdown - 1 } : null);
-    }, 1000);
-
-    return () => {
-      if (countdownIntervalRef.current) {
-        clearTimeout(countdownIntervalRef.current);
-      }
-    };
-  }, [pendingProduct]);
-
-  const confirmAdd = (selectedPrice?: number) => {
-    if (!pendingProduct) return;
-
-    const product = {
-      ...pendingProduct.product,
-      mainPrice: selectedPrice || pendingProduct.selectedPrice
-    };
+  const scheduleNextScan = useCallback(() => {
+    if (!isMountedRef.current) return;
     
-    setAddedProducts(prev => [...prev, product]);
-    onProductAdded?.(product);
-
-    const items: ExtractedItem[] = [{
-      name: product.name,
-      price: product.mainPrice,
-      quantity: 1,
-      unit: product.unit || 'un'
-    }];
-
-    onScanComplete({
-      text: product.rawText,
-      confidence: 90,
-      items,
-      products: [product]
-    });
-
-    setStatus('added');
-    setPendingProduct(null);
-
-    setTimeout(() => {
-      setStatus('scanning');
-    }, 2000);
-  };
-
-  const cancelAdd = () => {
-    setPendingProduct(null);
-    setStatus('scanning');
-  };
-
-  const selectPrice = (price: number) => {
-    if (pendingProduct) {
-      setPendingProduct({ ...pendingProduct, selectedPrice: price });
+    if (scanTimeoutRef.current) {
+      clearTimeout(scanTimeoutRef.current);
     }
-  };
-
-  const retryCamera = () => {
-    setCameraError(null);
-    setStatus('starting');
-    startScanning();
-  };
+    
+    scanTimeoutRef.current = setTimeout(() => {
+      if (isMountedRef.current) {
+        processFrame();
+      }
+    }, backoffDelayRef.current);
+  }, [processFrame]);
 
   const startScanning = useCallback(async () => {
     try {
       setStatus('starting');
+      setStatusMessage('Iniciando câmera...');
       setCameraError(null);
 
       workerRef.current = await Tesseract.createWorker('por');
@@ -430,48 +397,60 @@ export function OCRScanner({
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { 
           facingMode: { ideal: 'environment' },
-          width: { ideal: 640, max: 800 },
-          height: { ideal: 480, max: 600 }
+          width: { ideal: 640, max: 720 },
+          height: { ideal: 480, max: 540 }
         }
       });
       
+      if (!isMountedRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+
       streamRef.current = stream;
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
         
-        setStatus('scanning');
-        scanIntervalRef.current = setInterval(processFrame, 700);
+        setStatus('ready');
+        setStatusMessage('Aponte para a etiqueta');
+        scheduleNextScan();
       }
     } catch (err: any) {
       console.error('Erro ao iniciar scanner:', err);
       setStatus('error');
       
       if (err.name === 'NotAllowedError') {
-        setCameraError('Permissão de câmera negada. Por favor, permita o acesso à câmera nas configurações do navegador.');
+        setCameraError('Permissão de câmera negada. Permita o acesso nas configurações.');
       } else if (err.name === 'NotFoundError') {
-        setCameraError('Nenhuma câmera encontrada no dispositivo.');
-      } else if (err.name === 'NotSupportedError') {
-        setCameraError('Este navegador não suporta acesso à câmera. Use HTTPS.');
+        setCameraError('Nenhuma câmera encontrada.');
       } else {
-        setCameraError('Erro ao acessar câmera. Verifique as permissões.');
+        setCameraError('Erro ao acessar câmera.');
       }
       
       onError?.('Erro ao acessar câmera');
     }
-  }, [processFrame, onError]);
+  }, [scheduleNextScan, onError]);
 
   const stopScanning = useCallback(async () => {
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current);
-      scanIntervalRef.current = null;
+    isMountedRef.current = false;
+    
+    if (scanTimeoutRef.current) {
+      clearTimeout(scanTimeoutRef.current);
+      scanTimeoutRef.current = null;
     }
     
-    if (countdownIntervalRef.current) {
-      clearTimeout(countdownIntervalRef.current);
-      countdownIntervalRef.current = null;
-    }
+    priceTimeoutsRef.current.forEach(timeout => clearTimeout(timeout));
+    priceTimeoutsRef.current.clear();
+    detectionTimeoutsRef.current.forEach(timeout => clearTimeout(timeout));
+    detectionTimeoutsRef.current.clear();
+    recentPricesRef.current.clear();
+    lastPriceRef.current = '';
+    lastFrameDataRef.current = '';
+    stableFrameCountRef.current = 0;
+    emptyFrameCountRef.current = 0;
+    backoffDelayRef.current = 1200;
     
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
@@ -479,14 +458,21 @@ export function OCRScanner({
     }
     
     if (workerRef.current) {
-      await workerRef.current.terminate();
+      try {
+        await workerRef.current.terminate();
+      } catch {}
       workerRef.current = null;
     }
   }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
     startScanning();
-    return () => { stopScanning(); };
+    
+    return () => {
+      isMountedRef.current = false;
+      stopScanning();
+    };
   }, []);
 
   const handleClose = async () => {
@@ -497,7 +483,6 @@ export function OCRScanner({
   return (
     <div className="flex flex-col h-full bg-black relative overflow-hidden">
       <canvas ref={canvasRef} className="hidden" />
-      <canvas ref={cropCanvasRef} className="hidden" />
       
       <video
         ref={videoRef}
@@ -507,197 +492,108 @@ export function OCRScanner({
         className="w-full h-full object-cover"
       />
 
-      <div className="absolute top-4 right-4 z-20">
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={handleClose}
-          className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center"
-        >
-          <X className="w-5 h-5 text-white" />
-        </motion.button>
-      </div>
-      
       <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
         <div 
-          className="relative"
+          className="relative border-2 border-dashed rounded-2xl"
           style={{
-            width: '75%',
-            height: '55%',
+            width: '70%',
+            height: '40%',
+            borderColor: status === 'detected' || status === 'added' ? '#10B981' : '#3B82F6',
+            backgroundColor: status === 'detected' || status === 'added' ? 'rgba(16, 185, 129, 0.1)' : 'transparent',
+            transition: 'all 0.3s ease'
           }}
         >
-          <div className="absolute -top-1 -left-1 w-16 h-16 border-t-4 border-l-4 border-blue-500 rounded-tl-2xl" />
-          <div className="absolute -top-1 -right-1 w-16 h-16 border-t-4 border-r-4 border-blue-500 rounded-tr-2xl" />
-          <div className="absolute -bottom-1 -left-1 w-16 h-16 border-b-4 border-l-4 border-blue-500 rounded-bl-2xl" />
-          <div className="absolute -bottom-1 -right-1 w-16 h-16 border-b-4 border-r-4 border-blue-500 rounded-br-2xl" />
+          <div className="absolute -top-1 -left-1 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-xl" />
+          <div className="absolute -top-1 -right-1 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-xl" />
+          <div className="absolute -bottom-1 -left-1 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-xl" />
+          <div className="absolute -bottom-1 -right-1 w-8 h-8 border-b-4 border-r-4 border-blue-500 rounded-br-xl" />
 
           {status === 'scanning' && (
             <motion.div
-              className="absolute left-0 right-0 h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent"
-              animate={{
-                top: ['0%', '100%', '0%']
-              }}
-              transition={{
-                duration: 2,
-                repeat: Infinity,
-                ease: 'linear'
-              }}
+              className="absolute left-2 right-2 h-0.5 bg-blue-500"
+              animate={{ top: ['10%', '90%', '10%'] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
             />
           )}
         </div>
       </div>
 
-      <AnimatePresence mode="wait">
-        {status === 'detected' && pendingProduct && (
-          <motion.div
-            key="detected"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className="absolute inset-0 flex items-center justify-center p-8 z-30"
-          >
-            <div className="bg-emerald-500 rounded-3xl p-8 w-full max-w-sm text-center shadow-2xl">
+      <div className="absolute top-6 left-0 right-0 flex justify-center z-20">
+        <div className={`px-4 py-2 rounded-full backdrop-blur-sm ${
+          status === 'detected' || status === 'added' 
+            ? 'bg-emerald-500/90' 
+            : status === 'scanning' 
+              ? 'bg-blue-500/80' 
+              : 'bg-black/50'
+        }`}>
+          <div className="flex items-center gap-2">
+            {status === 'scanning' && (
               <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: 'spring', delay: 0.1 }}
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
               >
-                <CheckCircle className="w-20 h-20 text-white mx-auto mb-4" />
+                <Scan className="w-4 h-4 text-white" />
               </motion.div>
-              
-              <h2 className="text-2xl font-bold text-white mb-2">
-                Produto Detectado!
-              </h2>
-              <p className="text-white/90 text-lg mb-4">
-                {pendingProduct.product.name}
-              </p>
+            )}
+            {(status === 'detected' || status === 'added') && (
+              <CheckCircle className="w-4 h-4 text-white" />
+            )}
+            {status === 'ready' && (
+              <Camera className="w-4 h-4 text-white" />
+            )}
+            <span className="text-white text-sm font-medium">{statusMessage}</span>
+          </div>
+        </div>
+      </div>
 
-              {pendingProduct.product.prices.length > 1 ? (
-                <div className="space-y-2 mb-4">
-                  <p className="text-white/80 text-sm">Selecione o preço:</p>
-                  {pendingProduct.product.prices.map((price, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => selectPrice(price.value)}
-                      className={`w-full py-2 px-4 rounded-xl text-sm font-medium transition-all ${
-                        pendingProduct.selectedPrice === price.value
-                          ? 'bg-white text-emerald-600'
-                          : 'bg-white/20 text-white hover:bg-white/30'
-                      }`}
-                    >
-                      {price.label}: R$ {price.value.toFixed(2)}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-3xl font-bold text-white mb-4">
-                  R$ {pendingProduct.selectedPrice.toFixed(2)}
+      <AnimatePresence>
+        {detectedPrice !== null && (status === 'detected' || status === 'added') && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30"
+          >
+            <div className="bg-emerald-500 rounded-2xl px-8 py-6 shadow-2xl">
+              <p className="text-white/80 text-sm text-center mb-1">Preço detectado</p>
+              <p className="text-white text-4xl font-bold text-center">
+                R$ {detectedPrice.toFixed(2)}
+              </p>
+              {status === 'added' && (
+                <p className="text-white/90 text-sm text-center mt-2">
+                  ✓ Adicionado ao carrinho
                 </p>
               )}
-
-              <p className="text-white/80 text-sm mb-4">
-                Adicionando em {pendingProduct.countdown}...
-              </p>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={cancelAdd}
-                  className="flex-1 py-3 bg-white/20 text-white rounded-xl font-semibold"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => confirmAdd(pendingProduct.selectedPrice)}
-                  className="flex-1 py-3 bg-white text-emerald-600 rounded-xl font-semibold"
-                >
-                  Adicionar
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {status === 'added' && (
-          <motion.div
-            key="added"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className="absolute inset-0 flex items-center justify-center p-8 z-30"
-          >
-            <div className="bg-emerald-500 rounded-3xl p-8 w-full max-w-sm text-center shadow-2xl">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: 'spring' }}
-              >
-                <CheckCircle className="w-20 h-20 text-white mx-auto mb-4" />
-              </motion.div>
-              <h2 className="text-xl font-bold text-white">
-                Adicionado ao carrinho!
-              </h2>
-            </div>
-          </motion.div>
-        )}
-
-        {status === 'error' && cameraError && (
-          <motion.div
-            key="error"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className="absolute inset-0 flex items-center justify-center p-8 z-30"
-          >
-            <div className="bg-red-500 rounded-3xl p-8 w-full max-w-sm text-center shadow-2xl">
-              <AlertCircle className="w-16 h-16 text-white mx-auto mb-4" />
-              <h2 className="text-xl font-bold text-white mb-2">
-                Erro na Leitura
-              </h2>
-              <p className="text-white/90 text-sm mb-4">
-                {cameraError}
-              </p>
-              <button
-                onClick={retryCamera}
-                className="py-3 px-6 bg-white/20 text-white rounded-xl font-semibold border-2 border-white"
-              >
-                Tentar Novamente
-              </button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6 pt-12">
-        <div className="flex items-center gap-3 mb-2">
-          {status === 'scanning' || status === 'analyzing' ? (
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-              className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
-            />
-          ) : status === 'detected' || status === 'added' ? (
-            <CheckCircle className="w-5 h-5 text-emerald-400" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-red-400" />
-          )}
-          
-          <span className="text-white font-semibold text-lg">
-            {status === 'starting' && 'Iniciando câmera...'}
-            {status === 'scanning' && 'Escaneando preços...'}
-            {status === 'analyzing' && 'Analisando etiqueta...'}
-            {status === 'detected' && 'Produto encontrado'}
-            {status === 'added' && `${addedProducts[addedProducts.length - 1]?.name} adicionado`}
-            {status === 'error' && 'Erro na detecção'}
-          </span>
+      {status === 'error' && cameraError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-30 p-8">
+          <div className="bg-red-500 rounded-2xl p-6 text-center max-w-sm">
+            <AlertCircle className="w-12 h-12 text-white mx-auto mb-3" />
+            <p className="text-white font-medium mb-4">{cameraError}</p>
+            <button
+              onClick={() => { setCameraError(null); startScanning(); }}
+              className="px-6 py-2 bg-white/20 text-white rounded-xl"
+            >
+              Tentar novamente
+            </button>
+          </div>
         </div>
-        
-        <p className="text-white/60 text-sm mb-1">
-          Aponte para etiquetas de preço
-        </p>
-        
-        <div className="flex items-center gap-2 text-white/40 text-xs">
-          <Camera className="w-4 h-4" />
-          <span>OCR automático ativo</span>
-        </div>
+      )}
+
+      <div className="absolute bottom-8 left-0 right-0 flex justify-center z-[100]">
+        <motion.button
+          whileTap={{ scale: 0.95 }}
+          onClick={handleClose}
+          className="flex items-center gap-2 px-6 py-3 bg-white/90 backdrop-blur-sm rounded-full shadow-lg"
+          style={{ pointerEvents: 'auto' }}
+        >
+          <X className="w-5 h-5 text-gray-800" />
+          <span className="text-gray-800 font-semibold">Fechar Scanner</span>
+        </motion.button>
       </div>
     </div>
   );

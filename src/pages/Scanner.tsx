@@ -17,10 +17,10 @@ export function Scanner({ onProductScanned, onClose }: ScannerProps) {
   };
 
   const handleProductDetected = (product: ExtractedProduct) => {
-    console.log('Produto detectado:', product);
+    console.log('Produto detectado:', product.mainPrice);
   };
 
-  const handleProductAdded = async (product: ExtractedProduct) => {
+  const handleProductAdded = (product: ExtractedProduct) => {
     const atacadoPrice = product.prices.find(p => p.type === 'atacado');
     const varejoPrice = product.prices.find(p => p.type === 'varejo' || p.type === 'outro');
     const creditoPrice = product.prices.find(p => p.type === 'credito');
@@ -43,14 +43,13 @@ export function Scanner({ onProductScanned, onClose }: ScannerProps) {
 
     onProductScanned(newProduct);
 
-    toast.success(`${product.name} adicionado`, {
-      icon: '✓'
+    toast.success(`R$ ${precoAvulso.toFixed(2)} adicionado`, {
+      duration: 1500
     });
   };
 
   const handleError = (error: string) => {
     console.error('Erro no scanner:', error);
-    toast.error('Não foi possível ler o preço');
   };
 
   const handleClose = () => {
