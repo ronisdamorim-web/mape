@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { MapPin, Package, Sparkles, AlertCircle } from 'lucide-react';
+import { MapPin, Package, Sparkles, AlertCircle, ArrowLeft } from 'lucide-react';
 import type { Screen, SavedList } from '../types';
 
 interface WhereToShopProps {
@@ -17,6 +17,13 @@ export function WhereToShop({ onNavigate }: WhereToShopProps) {
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
         >
+          <button
+            onClick={() => onNavigate('home')}
+            className="flex items-center gap-2 text-white mb-6 font-semibold hover:opacity-80 transition-opacity"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            Voltar
+          </button>
           <div className="flex items-center gap-3 mb-3">
             <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center">
               <MapPin className="w-6 h-6 text-white" />

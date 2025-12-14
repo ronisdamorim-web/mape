@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { ShoppingCart, Check, Loader2, Mail, Lock, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { ShoppingCart, Check, Loader2, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { supabase } from '../services/supabase';
 
 interface LoginProps {
@@ -160,17 +160,14 @@ export function Login({ onLogin }: LoginProps) {
     if (mode === 'forgot') {
       return (
         <form onSubmit={handleForgotPassword} className="w-full space-y-4">
-          <div className="relative">
-            <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Seu e-mail"
-              required
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl py-4 pl-12 pr-4 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Seu e-mail"
+            required
+            className="w-full bg-gray-50 border border-gray-200 rounded-xl py-4 px-4 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
 
           <button
             type="submit"
@@ -199,27 +196,23 @@ export function Login({ onLogin }: LoginProps) {
     return (
       <div className="w-full space-y-4">
         <form onSubmit={mode === 'login' ? handleLogin : handleSignup} className="space-y-4">
-          <div className="relative">
-            <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="E-mail"
-              required
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl py-4 pl-12 pr-4 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="E-mail"
+            required
+            className="w-full bg-gray-50 border border-gray-200 rounded-xl py-4 px-4 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
 
           <div className="relative">
-            <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Senha"
               required
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl py-4 pl-12 pr-12 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl py-4 px-4 pr-12 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
             <button
               type="button"
@@ -231,17 +224,14 @@ export function Login({ onLogin }: LoginProps) {
           </div>
 
           {mode === 'signup' && (
-            <div className="relative">
-              <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirmar senha"
-                required
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl py-4 pl-12 pr-4 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirmar senha"
+              required
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl py-4 px-4 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
           )}
 
           {mode === 'login' && (

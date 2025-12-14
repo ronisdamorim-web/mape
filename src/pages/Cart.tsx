@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShoppingCart as CartIcon, Trash2, Plus, Minus, Check, Package, Tag, CreditCard } from 'lucide-react';
+import { ShoppingCart as CartIcon, Trash2, Plus, Minus, Check, Package, Tag, CreditCard, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { calculateCartTotals } from '../utils/calculations';
 import type { Product, Screen } from '../types';
@@ -12,7 +12,7 @@ interface CartProps {
   onNavigate?: (screen: Screen) => void;
 }
 
-export function Cart({ products, onUpdateProducts, onFinalizePurchase }: CartProps) {
+export function Cart({ products, onUpdateProducts, onFinalizePurchase, onNavigate }: CartProps) {
 
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
 
@@ -45,8 +45,17 @@ export function Cart({ products, onUpdateProducts, onFinalizePurchase }: CartPro
   return (
     <div className="min-h-screen bg-[#F9FAFB] pb-48">
       <div className="bg-white px-6 py-5 border-b border-[#E5E7EB] sticky top-0 z-10">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between mb-3">
+          {onNavigate && (
+            <button
+              onClick={() => onNavigate('home')}
+              className="flex items-center gap-2 text-[#0066FF] font-semibold hover:opacity-80 transition-opacity mr-4"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              Voltar
+            </button>
+          )}
+          <div className="flex-1">
             <h2 className="text-[#111827] font-bold text-xl mb-1">Carrinho</h2>
             <small className="text-[#6B7280]">{products.length} {products.length === 1 ? 'item' : 'itens'}</small>
           </div>
