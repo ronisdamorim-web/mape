@@ -145,6 +145,34 @@ CREATE POLICY "Users can view own purchase history" ON purchase_history
 CREATE POLICY "Users can insert own purchases" ON purchase_history
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+-- Tabela de sessões de scan
+CREATE TABLE IF NOT EXISTS scan_sessions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  market_name TEXT,
+  location_lat DECIMAL(10, 8),
+  location_lng DECIMAL(11, 8),
+  location_label TEXT,
+  raw_text TEXT,
+  status TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'confirmed')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE scan_sessions ENABLE ROW LEVEL SECURITY;
+
+-- Políticas de segurança para scan_sessions
+CREATE POLICY "Users can view own scan sessions" ON scan_sessions
+  FOR SELECT USING (auth.uid() = user_id OR user_id IS NULL);
+
+CREATE POLICY "Users can insert scan sessions" ON scan_sessions
+  FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
+
+CREATE POLICY "Users can update own scan sessions" ON scan_sessions
+  FOR UPDATE USING (auth.uid() = user_id OR user_id IS NULL);
+
+CREATE INDEX IF NOT EXISTS idx_scan_sessions_user_id ON scan_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_scan_sessions_status ON scan_sessions(status);
+
 -- Índices para melhor performance
 CREATE INDEX IF NOT EXISTS idx_cart_items_user_id ON cart_items(user_id);
 CREATE INDEX IF NOT EXISTS idx_global_prices_product_name ON global_prices(product_name);

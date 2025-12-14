@@ -1,20 +1,30 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Calendar, ShoppingBag, Package } from 'lucide-react';
+import { Calendar, ShoppingBag, Package, ArrowLeft } from 'lucide-react';
 import { supabase, getPurchaseHistory, type PurchaseHistory } from '../services/supabase';
+import type { Screen } from '../types';
 
-export function History() {
+interface HistoryProps {
+  onNavigate?: (screen: Screen) => void;
+}
+
+export function History({ onNavigate }: HistoryProps) {
   const [purchases, setPurchases] = useState<PurchaseHistory[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadHistory = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const history = await getPurchaseHistory(session.user.id);
-        setPurchases(history);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const history = await getPurchaseHistory(session.user.id);
+          setPurchases(history);
+        }
+      } catch (error) {
+        console.error('Erro ao carregar histórico:', error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     loadHistory();
@@ -34,8 +44,21 @@ export function History() {
   return (
     <div className="min-h-screen bg-[#F9FAFB] pb-24">
       <div className="bg-white px-6 py-5 border-b border-[#E5E7EB]">
-        <h2 className="text-[#111827] text-xl font-bold mb-1">Histórico</h2>
-        <small className="text-[#6B7280]">Suas compras anteriores</small>
+        <div className="flex items-center gap-3 mb-2">
+          {onNavigate && (
+            <button
+              onClick={() => onNavigate('home')}
+              className="flex items-center gap-2 text-[#0066FF] font-semibold hover:opacity-80 transition-opacity"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              Voltar
+            </button>
+          )}
+          <div className="flex-1">
+            <h2 className="text-[#111827] text-xl font-bold mb-1">Histórico</h2>
+            <small className="text-[#6B7280]">Suas compras anteriores</small>
+          </div>
+        </div>
       </div>
 
       <div className="px-4 py-4">

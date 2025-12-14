@@ -2,14 +2,15 @@ import { motion } from 'motion/react';
 import { 
   TrendingDown, 
   Package,
-  AlertCircle
+  AlertCircle,
+  ArrowLeft
 } from 'lucide-react';
-import type { Product, SavedList } from '../types';
+import type { Product, SavedList, Screen } from '../types';
 
 interface CompareProps {
   products: Product[];
   savedList?: SavedList | null;
-  onNavigate: (screen: any) => void;
+  onNavigate: (screen: Screen) => void;
   context?: 'whereToShop' | 'default';
 }
 
@@ -53,6 +54,13 @@ export function Compare({ products, savedList, onNavigate }: CompareProps) {
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
         >
+          <button
+            onClick={() => onNavigate('home')}
+            className="flex items-center gap-2 text-[#0066FF] font-semibold hover:opacity-80 transition-opacity mb-4"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            Voltar
+          </button>
           <div className="flex items-center gap-2 mb-2">
             <TrendingDown className="w-6 h-6 text-[#0066FF]" />
             <h1 className="text-[#111827]">Comparar Mercados</h1>

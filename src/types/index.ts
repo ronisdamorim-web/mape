@@ -93,7 +93,8 @@ export type Screen =
   | 'settingsHelp'
   | 'settingsAbout'
   | 'network'
-  | 'login';
+  | 'login'
+  | 'resetPassword';
 
 export type PaymentMode = 'atacado' | 'credito' | 'varejo';
 

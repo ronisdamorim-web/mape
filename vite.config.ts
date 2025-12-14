@@ -12,20 +12,14 @@ export default defineConfig({
   },
 
   server: {
-    host: true,
+    host: '0.0.0.0', // Permite acesso local e remoto
     port: 5000,
     strictPort: true,
-
-    // ✅ LIBERA QUALQUER HOST (Replit incluído)
     allowedHosts: true,
-
-    hmr: {
-      clientPort: 443,
-    },
   },
 
   build: {
     target: "esnext",
-    outDir: "build",
+    outDir: "dist",
   },
 });
