@@ -29,7 +29,7 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
 
   useEffect(() => {
-    // Verificar se está na rota /reset-password
+    // Verificar se está na rota /reset-password ou se há tokens de recovery no hash
     const pathname = window.location.pathname;
     const urlParams = new URLSearchParams(window.location.search);
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
@@ -38,9 +38,13 @@ export default function App() {
     const type = urlParams.get('type') || hashParams.get('type');
     const accessToken = urlParams.get('access_token') || hashParams.get('access_token');
     
-    // Detectar rota de reset de senha pela URL ou parâmetros
+    // Detectar rota de reset de senha pela URL ou parâmetros (mesmo na raiz)
     if (pathname === '/reset-password' || pathname === '/reset-password/' || (type === 'recovery' && accessToken)) {
       setCurrentScreen('resetPassword');
+      // Se veio na raiz com hash, atualizar a URL para /reset-password (sem perder o hash)
+      if (pathname === '/' && type === 'recovery' && accessToken) {
+        window.history.replaceState({}, '', '/reset-password' + window.location.hash);
+      }
     }
     
     // Timeout curto para garantir que sempre apareça
